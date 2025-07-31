@@ -48,7 +48,7 @@ import my_utensils as uten
 import my_potts
 from my_parameters import *
 
-Q = 12
+Q = 2
 beta_final = my_args.beta0*np.log(1.0+np.sqrt(1.0*Q))
 run_num = my_args.rn
 loss_num = my_args.lossn

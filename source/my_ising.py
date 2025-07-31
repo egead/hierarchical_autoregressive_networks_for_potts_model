@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-
+#For 2D square ising model with PBC
 def energy(sample, ham, lattice):
     spins = sample[:, :, :, :, 1] - sample[:, :, :, :, 0] 
     
