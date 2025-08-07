@@ -153,7 +153,7 @@ optimizer = torch.optim.Adam(params, lr=lr, betas=(0.9, 0.999))
 try:
     if net_type =='mnVAN':
     
-        state = torch.load('saved_state_b_L='+str(L)+'_beta='+str(beta_final)+'_mn.out')
+        state = torch.load('saved_state_b_L='+str(L)+'_beta='+str(beta_final)+'_mn.out', weights_only=True)
         net_b.load_state_dict(state['net'])
         
         first_step = state['last_step']
@@ -359,9 +359,8 @@ if nmcmc_or_nis and (first_step>=start_counting or L<=32):
 
             
             if net_type =='mnVAN':
-                sample, list_args_for_nets, log_prob_chess = build_sample(Q, net_b, int_nets, beta, L, batch_size)
-                log_prob = calc_log_prob(z2, translation_y, net_b, int_nets, Q, beta, sample, list_args_for_nets , log_prob_chess,step1)
-
+                sample = build_sample(Q, net_b, int_nets, beta, L, batch_size)
+                log_prob = calc_log_prob(z2, translation_y, net_b, int_nets, Q, beta, sample, step1)
 
             elif net_type =='VAN':
                 sample, x_hat = net.sample(batch_size, beta)
