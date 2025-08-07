@@ -1,6 +1,5 @@
-#!/usr/bin/env python
-## Standalone NMCMC analysis for pre-trained HAN models
-## Based on the original multinets.py implementation
+#Standalone NMCMC analysis for pre-trained HAN models
+#Based on the original multinets.py implementation
 
 import numpy as np
 import torch
@@ -11,6 +10,8 @@ import my_potts
 import my_utensils as uten
 from my_parameters import *
 import os
+from my_dense_VAN import MADE, MADE_b, MADE_i
+from sampling_file import build_sample, calc_log_prob, breakdown_square
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--beta0', type=float, required=True, help='beta = 1 / k_B T')
@@ -53,15 +54,6 @@ print(f'batches to collect: {colected_batches}')
 print(f'device: {device}')
 print()
 
-if net_type == 'VAN':
-    from my_dense_VAN import MADE
-elif net_type == 'mnVAN':
-    from my_dense import MADE_b, MADE_i
-    from sampling_file import build_sample, calc_log_prob, breakdown_square
-else:
-    print('Undefined algorithm!')
-    exit()
-
 if net_type == 'mnVAN':
     n_i_nets = int(np.log2(L))
     blocks_widths = L // 2**(np.arange(1, n_i_nets+1) - 1) - 1
@@ -79,15 +71,14 @@ if net_type == 'mnVAN':
         net_i.to(device)
         int_nets.append(net_i)
     
-
     model_path = os.path.join(model_dir, f'saved_state_b_L={L}_beta={beta_final}_mn.out')
-    state = torch.load(model_path)
+    state = torch.load(model_path, map_location=device)
     net_b.load_state_dict(state['net'])
     print(f'Boundary network loaded from {model_path}')
     
     for k in range(n_i_nets):
         model_path = os.path.join(model_dir, f'saved_state_intnet{k}_L={L}_beta={beta_final}_mn.out')
-        state = torch.load(model_path)
+        state = torch.load(model_path, map_location=device)
         int_nets[k].load_state_dict(state['net'])
     print('Interior networks loaded')
 
@@ -95,9 +86,9 @@ if net_type == 'mnVAN':
 elif net_type == 'VAN':
     net = MADE(Q, L, net_depth, net_width, bias, z2, translation_y, 
                res_block, x_hat_clip, epsilon, device)
-    net.to(device) 
+    net.to(device)
     model_path = os.path.join(model_dir, f'saved_state_VAN_L={L}_beta={beta_final}.out')
-    state = torch.load(model_path)
+    state = torch.load(model_path, map_location=device)
     net.load_state_dict(state['net'])
     print(f'VAN network loaded from {model_path}')
 
@@ -133,21 +124,6 @@ N_samples = sh[0] * sh[1]
 
 list_energy = list_energy.reshape(N_samples)
 list_log_prob = list_log_prob.reshape(N_samples)
-list_loss = list_log_prob + beta * list_energy
-
-free_energy_mean = np.mean(list_loss) / beta / L**2
-free_energy_err = np.std(list_loss) / np.sqrt(N_samples) / beta / L**2
-
-energy_mean = np.mean(list_energy) / L**2
-energy_err = np.std(list_energy) / np.sqrt(N_samples) / L**2
-
-ess = 2 * logsumexp(-list_loss, 0) - logsumexp(-2 * list_loss, 0)
-ess = np.exp(ess) / N_samples
-
-print(f'\nResults before Metropolis:')
-print(f'F = {free_energy_mean:.6f} ± {free_energy_err:.6f}')
-print(f'U = {energy_mean:.6f} ± {energy_err:.6f}')
-print(f'ESS = {ess:.4f}')
 
 list_energy, list_log_prob, accept_cont = uten.metropolis(beta, list_energy, list_log_prob)
 accept_ratio = np.mean(accept_cont)
@@ -165,15 +141,19 @@ else:
 print(f'tau_int = {tau_int:.2f}')
 
 list_loss = list_log_prob + beta * list_energy
-free_energy_mean_metro = np.mean(list_loss) / beta / L**2
-free_energy_err_metro = np.std(list_loss) / np.sqrt(N_samples / tau_int) / beta / L**2
+free_energy_mean = np.mean(list_loss) / beta / L**2
+free_energy_err = np.std(list_loss) / np.sqrt(N_samples / tau_int) / beta / L**2
 
-energy_mean_metro = np.mean(list_energy) / L**2
-energy_err_metro = np.std(list_energy) / np.sqrt(N_samples / tau_int) / L**2
+energy_mean = np.mean(list_energy) / L**2
+energy_err = np.std(list_energy) / np.sqrt(N_samples / tau_int) / L**2
+
+ess = 2 * logsumexp(-list_loss, 0) - logsumexp(-2 * list_loss, 0)
+ess = np.exp(ess) / N_samples
 
 print(f'\nResults after Metropolis:')
-print(f'F = {free_energy_mean_metro:.6f} ± {free_energy_err_metro:.6f}')
-print(f'U = {energy_mean_metro:.6f} ± {energy_err_metro:.6f}')
+print(f'F = {free_energy_mean:.6f} ± {free_energy_err:.6f}')
+print(f'U = {energy_mean:.6f} ± {energy_err:.6f}')
+print(f'ESS = {ess:.4f}')
 
 elapsed_time = time.time() - start_time
 print(f'\nTotal time: {elapsed_time:.2f} seconds')
@@ -182,8 +162,8 @@ output_file = f'nmcmc_results_L={L}_beta={beta_final}_{net_type}.txt'
 with open(output_file, 'w') as f:
     f.write(f'# NMCMC Results\n')
     f.write(f'# L = {L}, beta = {beta_final}, batches = {colected_batches}, batch_size = {batch_size}\n')
-    f.write(f'# Free energy: {free_energy_mean_metro} ± {free_energy_err_metro}\n')
-    f.write(f'# Energy: {energy_mean_metro} ± {energy_err_metro}\n')
+    f.write(f'# Free energy: {free_energy_mean} ± {free_energy_err}\n')
+    f.write(f'# Energy: {energy_mean} ± {energy_err}\n')
     f.write(f'# Accept ratio: {accept_ratio}\n')
     f.write(f'# tau_int: {tau_int}\n')
     f.write(f'# ESS: {ess}\n')
