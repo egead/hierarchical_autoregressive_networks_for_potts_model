@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/home/egad/hierarchical_autoregressive_networks_for_potts_model/source/nmcmc_analysis.py", line 13, in <module>
+    from my_dense import MADE, MADE_b, MADE_i
+ImportError: cannot import name 'MADE' from 'my_dense' (/home/egad/hierarchical_autoregressive_networks_for_potts_model/source/my_dense.py). Did you mean: 'MADE_b'?

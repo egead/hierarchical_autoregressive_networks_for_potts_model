@@ -10,7 +10,7 @@ import my_potts
 import my_utensils as uten
 from my_parameters import *
 import os
-from my_dense_VAN import MADE, MADE_b, MADE_i
+from my_dense import MADE_b, MADE_i
 from sampling_file import build_sample, calc_log_prob, breakdown_square
 
 parser = argparse.ArgumentParser()
@@ -20,7 +20,7 @@ parser.add_argument('--batches', type=int, default=100, help='number of batches 
 parser.add_argument('--batch_size', type=int, default=1024, help='batch size')
 parser.add_argument('--Z2', type=int, default=0, help='Z2 symmetry')
 parser.add_argument('--Ty', type=int, default=0, help='Ty symmetry')
-parser.add_argument('--net_type', type=str, default='mnVAN', help='VAN or mnVAN')
+parser.add_argument('--net_type', type=str, default='mnVAN', help='only mnVAN')
 parser.add_argument('--model_dir', type=str, default='.', help='directory containing model files')
 args = parser.parse_args()
 
@@ -54,43 +54,34 @@ print(f'batches to collect: {colected_batches}')
 print(f'device: {device}')
 print()
 
-if net_type == 'mnVAN':
-    n_i_nets = int(np.log2(L))
-    blocks_widths = L // 2**(np.arange(1, n_i_nets+1) - 1) - 1
-    print(f'number of int nets: {n_i_nets}')
-    print(f'crosses sizes Li: {blocks_widths}')
-    
-    net_b = MADE_b(Q, L, n_block, net_depth, net_width, bias, z2, translation_y, 
-                   res_block, x_hat_clip, epsilon, device)
-    net_b.to(device)
-    
-    int_nets = []
-    for k in range(n_i_nets):
-        net_i = MADE_i(Q, blocks_widths[k], net_depth, net_width, bias, z2, translation_y,
-                      res_block, x_hat_clip, epsilon, device)
-        net_i.to(device)
-        int_nets.append(net_i)
-    
-    model_path = os.path.join(model_dir, f'saved_state_b_L={L}_beta={beta_final}_mn.out')
-    state = torch.load(model_path, map_location=device)
-    net_b.load_state_dict(state['net'])
-    print(f'Boundary network loaded from {model_path}')
-    
-    for k in range(n_i_nets):
-        model_path = os.path.join(model_dir, f'saved_state_intnet{k}_L={L}_beta={beta_final}_mn.out')
-        state = torch.load(model_path, map_location=device)
-        int_nets[k].load_state_dict(state['net'])
-    print('Interior networks loaded')
 
-        
-elif net_type == 'VAN':
-    net = MADE(Q, L, net_depth, net_width, bias, z2, translation_y, 
-               res_block, x_hat_clip, epsilon, device)
-    net.to(device)
-    model_path = os.path.join(model_dir, f'saved_state_VAN_L={L}_beta={beta_final}.out')
+n_i_nets = int(np.log2(L))
+blocks_widths = L // 2**(np.arange(1, n_i_nets+1) - 1) - 1
+print(f'number of int nets: {n_i_nets}')
+print(f'crosses sizes Li: {blocks_widths}')
+
+net_b = MADE_b(Q, L, n_block, net_depth, net_width, bias, z2, translation_y, 
+                res_block, x_hat_clip, epsilon, device)
+net_b.to(device)
+
+int_nets = []
+for k in range(n_i_nets):
+    net_i = MADE_i(Q, blocks_widths[k], net_depth, net_width, bias, z2, translation_y,
+                    res_block, x_hat_clip, epsilon, device)
+    net_i.to(device)
+    int_nets.append(net_i)
+
+model_path = os.path.join(model_dir, f'saved_state_b_L={L}_beta={beta_final}_mn.out')
+state = torch.load(model_path, map_location=device)
+net_b.load_state_dict(state['net'])
+print(f'Boundary network loaded from {model_path}')
+
+for k in range(n_i_nets):
+    model_path = os.path.join(model_dir, f'saved_state_intnet{k}_L={L}_beta={beta_final}_mn.out')
     state = torch.load(model_path, map_location=device)
-    net.load_state_dict(state['net'])
-    print(f'VAN network loaded from {model_path}')
+    int_nets[k].load_state_dict(state['net'])
+print('Interior networks loaded')    
+
 
 
 print('\nStarting NMCMC sampling...')
@@ -110,9 +101,6 @@ with torch.no_grad():
             sample = build_sample(Q, net_b, int_nets, beta, L, batch_size)
             list_args_for_nets, log_prob_chess = breakdown_square(sample, beta, L, Q, batch_size)
             log_prob = calc_log_prob(z2, translation_y, net_b, int_nets, Q, beta, sample, step)
-        elif net_type == 'VAN':
-            sample, x_hat = net.sample(batch_size, beta, Q)
-            log_prob = net.log_prob(sample, beta)
         
         energy = my_potts.energy(sample, ham, lattice, boundary)
         
